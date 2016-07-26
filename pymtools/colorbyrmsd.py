@@ -102,6 +102,7 @@ EXAMPLE
         cmd.show_as('cartoon', 'byobj ' + seleboth)
         cmd.color('gray', seleboth)
         cmd.spectrum('b', 'blue_red', seleboth + ' and b > -0.5')
+        # cmd.color('forest', target)
 
     if not quiet:
         logger.info(" ColorByRMSD: Minimum Distance: %.2f" % (

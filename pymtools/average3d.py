@@ -239,6 +239,9 @@ def avg_states(object='all', object_sel=None, first=1, last=0, newobj=None,
         avg_file.close()
         if pairs:
             pair_file.close()
+
+    cmd.delete(tmpobject)
+
     return newobj
 
 

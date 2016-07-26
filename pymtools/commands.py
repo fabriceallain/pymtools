@@ -6,6 +6,8 @@ from .base import Settings
 from pymol import cmd, CmdException
 from .colorbyrmsd import colorbyrmsd
 from .average3d import avg_states
+from .cnstr import Cnstr
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +22,10 @@ def check_file(prospective_file):
                                      "file".format(prospective_file))
 
 
-class ReadableFile(argp.Action):
+class FileChecker(argp.Action):
 
     def __init__(self, *args, **kwargs):
-        super(ReadableFile, self).__init__(*args, **kwargs)
+        super(FileChecker, self).__init__(*args, **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None):
         if type(values) == list:
@@ -37,10 +39,11 @@ class ReadableFile(argp.Action):
 class PymToolSettings(Settings):
 
     DESC = u"PyMol Toolbox"
-    COMMANDS = ("align", "visu", "aver")
+    COMMANDS = ("align", "visu", "aver", "cnstr")
     COMMANDESCS = (u"Align 2 pdb structures",
                    u"Pymol visualisation",
-                   u"Average 3d states of a pdb structure")
+                   u"Average 3d states of a pdb structure",
+                   u"Visualize constrains on a pdb structure")
     CONFPATH = "conf/pymtools.ini"
 
     def __init__(self):
@@ -48,6 +51,7 @@ class PymToolSettings(Settings):
         self.load_config(self.CONFPATH, pkg=True)
 
     def load_config(self, configpath, **kwargs):
+        logger.info("Loading default config file")
         super(PymToolSettings, self).load_config(configpath, **kwargs)
 
 
@@ -76,11 +80,11 @@ class Command(object):
             formatter_class=argp.ArgumentDefaultsHelpFormatter)
         parser.add_argument("-o", "--output",
                             type=str, help="Output directory", required=True)
-        parser.add_argument("--log", action="store_true",
-                            default=False, help="Generate log files")
-        parser.add_argument("-c", "--conf", action=ReadableFile,
+        parser.add_argument("-c", "--conf", action=FileChecker,
                             dest="conf_file", default=None,
                             help="configuration file")
+        parser.add_argument("--log", action="store_true",
+                            default=False, help="Generate log files")
         # Create subcommands
         self._create_subparsers(parser.add_subparsers(dest="command"))
         return parser
@@ -105,10 +109,9 @@ class Command(object):
                     logger.removeHandler("info_file_handler")
                     logger.removeHandler("error_file_handler")
                     logger.removeHandler("debug_file_handler")
-                    log.set_outdir(self._args.output)
+                log.set_outdir(self._args.output)
 
     def _update_settings(self):
-        logger.info("Loading default config file")
         if self._args.conf_file:
             logger.info("Updating settings with conf file")
             self.settings.load_config(self._args.conf_file)
@@ -144,20 +147,10 @@ class PymToolCommand(Command):
     def _align_parser(desc=None):
         parser = argp.ArgumentParser(description=desc,
                                      add_help=False)
-
         group = parser.add_argument_group('required arguments')
         group.add_argument("target", help="target structure file [.pdb]")
         group.add_argument("mob",
                            help="mobile structure file [.pdb]")
-        group.add_argument("--align", dest="align", type=int, choices=(0, 1),
-                           default=1,
-                           help="superpose structures before RMSD calculation")
-        group.add_argument("--guide", dest="guide", default=False,
-                           action="store_true",
-                           help="Only use C-alpha atoms")
-        group.add_argument("--method", dest="method", default="tmalign",
-                           choices=('super', "align", 'tmalign', 'cealign'),
-                           help="Method to match atoms")
         group.add_argument("--pretty", dest="pretty", action="store_true",
                            default=False,
                            help="Nice representation and colors")
@@ -167,21 +160,18 @@ class PymToolCommand(Command):
     def _visu_parser(desc=None):
         parser = argp.ArgumentParser(description=desc,
                                      add_help=False)
-
         group = parser.add_argument_group('required arguments')
         group.add_argument("struct", help="structure file [.pdb]",
-                           action=ReadableFile)
+                           action=FileChecker)
         group.add_argument("--pretty", dest="pretty", action="store_true",
                            default=False,
                            help="Nice representation and colors")
-
         return parser
 
     @staticmethod
     def _aver_parser(desc=None):
         parser = argp.ArgumentParser(description=desc,
                                      add_help=False)
-
         group = parser.add_argument_group('required arguments')
         group.add_argument("pdb", help="pdb structure with several states")
         group.add_argument("--sel", default="name CA",
@@ -192,10 +182,24 @@ class PymToolCommand(Command):
                                 "averaging and number of the last state to "
                                 "include in averaging. A value of '0' (zero) "
                                 "means use the last state in the object.")
-        group.add_argument("--pair", choices=[0, 1], default=1,
-                           help="Calculate average pairwise RMSD for each "
-                                "residue position")
+        return parser
 
+    @staticmethod
+    def _cnstr_parser(desc=None):
+        parser = argp.ArgumentParser(description=desc, add_help=False)
+
+        group = parser.add_argument_group('required arguments')
+        group.add_argument(
+            "constrains", action=FileChecker,
+            help="NMR constrains in .tbl, .txt or in .csv format. For .txt and "
+                 ".csv format, the file should follow the same syntax as in "
+                 "examples/data folder.")
+        group.add_argument("pdb", action=FileChecker, help="PDB file")
+        group.add_argument("-r", "--ref", action=FileChecker,
+                           help="Reference pdb file")
+        group.add_argument("-w", "--writefiles", dest="writefiles",
+                           action="store_true", default=False,
+                           help="Reference pdb file")
         return parser
 
     @staticmethod
@@ -213,15 +217,16 @@ class PymToolCommand(Command):
             logger.error("Can't load %s", settings.args.get('mob'))
             raise
 
-        logger.info("Align and color by RMSD mobile against target structure")
+        logger.info("Align and color by RMSD mobile against target structure "
+                    "with method %s" % settings.config.get('method'))
         mob = os.path.basename(os.path.splitext(settings.args.get('mob'))[0])
         target = os.path.basename(os.path.splitext(
             settings.args.get('target'))[0])
         logger.debug("mobile prefix: %s", mob)
         logger.debug("target prefix: %s", target)
         colorbyrmsd(mob, target, quiet=0,
-                    guide=1 if settings.args.get('guide') else 0,
-                    method=settings.args.get('method'))
+                    guide=settings.config.get("guide"),
+                    method=settings.config.get('method'))
 
     @staticmethod
     def visu(settings):
@@ -250,13 +255,20 @@ class PymToolCommand(Command):
         # Fit to the first state by default (which is the best one according to
         #  aria order)
         objfit = avg_states(mypdb, object_sel=settings.args.get('sel'),
-                            first=1, last=0,
+                            first=settings.config.get('first'),
+                            last=settings.config.get('last'),
                             newobj=settings.config.get('newobj'),
                             fitverdict=settings.config.get('fit'),
+                            verb=settings.config.get('verb'),
+                            pairs=settings.config.get('pairs'),
                             writefiles=settings.config.get('writefiles'))
         cmd.cartoon('putty', objfit)
         cmd.show('cartoon', objfit)
         cmd.spectrum('b', 'blue_white_red', objfit)
+
+    @staticmethod
+    def cnstr(settings):
+        Cnstr(settings=settings).run()
 
     @staticmethod
     def pympretty(rainbow=False):

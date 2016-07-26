@@ -6,6 +6,7 @@ import os
 import re
 import ast
 import json
+import shutil
 import logging
 import collections
 import logging.config
@@ -84,8 +85,6 @@ class CustomLogging(object):
     """
     Custom configuration for logging
     """
-    # default_file = os.path.join(os.path.abspath(os.path.dirname(__file__)),
-    #                             "conf/logging.json")
     default_file = "conf/logging.json"
 
     def __init__(self, level=logging.INFO, desc=None):
@@ -135,12 +134,19 @@ class CustomLogging(object):
         outdir = os.path.join(outdir, "log") if "log" not in outdir else outdir
         if not os.path.exists(os.path.abspath(outdir)):
             os.makedirs(outdir)
+        else:
+            # Trick to avoid overwriting files with w mode after copy2 call
+            shutil.rmtree(os.path.abspath(outdir))
+            os.makedirs(outdir)
         if outdir and "handlers" in self.config:
             for hand in self.config["handlers"]:
                 if "filename" in self.config["handlers"][hand]:
-                    self.config["handlers"][hand]["filename"] = \
-                        os.path.join(outdir, os.path.basename(
-                            self.config["handlers"][hand]["filename"]))
+                    oldpath = self.config["handlers"][hand]["filename"]
+                    newpath = os.path.abspath(os.path.join(
+                        outdir, os.path.basename(
+                            self.config["handlers"][hand]["filename"])))
+                    self.config["handlers"][hand]["filename"] = newpath
+                    shutil.copy2(oldpath, newpath)
             logging.config.dictConfig(self.config)
 
     def welcome(self):
@@ -148,7 +154,7 @@ class CustomLogging(object):
 
         :return:
         """
-        desc = '''
+        desc = '''\
 ================================================================================
 
 {:^80}
@@ -156,6 +162,10 @@ class CustomLogging(object):
 ================================================================================
 '''.format(self.msg)
         print(desc)
+        for hand in self.config.get("handlers"):
+            if "filename" in self.config["handlers"][hand]:
+                with open(self.config["handlers"][hand]["filename"], 'w') as f:
+                    f.write(desc)
 
 
 def format_str(string):
