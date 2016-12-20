@@ -13,7 +13,7 @@ import logging
 from tmalign import *
 
 
-logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 def colorbyrmsd(mobile, target, doalign=1, dopretty=1, guide=1, method='super',
@@ -55,7 +55,7 @@ EXAMPLE
     try:
         align = cmd.keyword[method][0]
     except Exception as msg:
-        logger.error('Wrong alignment method (%s)' % method)
+        LOG.error('Wrong alignment method (%s)' % method)
         raise CmdException(msg)
 
     if guide:
@@ -65,7 +65,7 @@ EXAMPLE
     try:
         if doalign:
             # superpose
-            logger.info("Align %s with %s" % (mobile, target))
+            LOG.info("Align %s with %s" % (mobile, target))
             align(mobile, target, quiet=0)
 
         # get alignment without superposing
@@ -74,7 +74,7 @@ EXAMPLE
         else:
             align(mobile, target, transform=0, object=aln)
     except Exception as msg:
-        logger.error(' Error: Alignment with method %s failed' % method)
+        LOG.error(' Error: Alignment with method %s failed' % method)
         raise CmdException(msg)
 
     cmd.select(seleboth, '(%s) or (%s)' % (mobile, target))
@@ -87,7 +87,7 @@ EXAMPLE
         # this should ensure that "aln" will be available as selectable object
         cmd.refresh()
 
-    logger.info("Saving RMS in b  factor columns")
+    LOG.info("Saving RMS in b  factor columns")
     b_dict = dict()
     for col in cmd.get_raw_alignment(aln):
         assert len(col) == 2
@@ -105,11 +105,11 @@ EXAMPLE
         # cmd.color('forest', target)
 
     if not quiet:
-        logger.info(" ColorByRMSD: Minimum Distance: %.2f" % (
+        LOG.info(" ColorByRMSD: Minimum Distance: %.2f" % (
             min(b_dict.values())))
-        logger.info(" ColorByRMSD: Maximum Distance: %.2f" % (
+        LOG.info(" ColorByRMSD: Maximum Distance: %.2f" % (
             max(b_dict.values())))
-        logger.info(" ColorByRMSD: Average Distance: %.2f" % (
+        LOG.info(" ColorByRMSD: Average Distance: %.2f" % (
             sum(b_dict.values()) / len(b_dict)))
 
     # cmd.delete(aln)

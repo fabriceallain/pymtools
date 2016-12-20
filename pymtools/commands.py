@@ -1,3 +1,7 @@
+# coding=utf-8
+"""
+                        Command line class
+"""
 import os
 import pymol
 import logging
@@ -7,13 +11,18 @@ from pymol import cmd, CmdException
 from .colorbyrmsd import colorbyrmsd
 from .average3d import avg_states
 from .cnstr import Cnstr
+from .align_all import align_all
 
 
-logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 def check_file(prospective_file):
 
+    """
+
+    :param prospective_file:
+    """
     if not os.path.exists(prospective_file):
         raise argp.ArgumentTypeError("readable_file:'{0}' is not a valid "
                                      "path".format(prospective_file))
@@ -23,6 +32,10 @@ def check_file(prospective_file):
 
 
 class FileChecker(argp.Action):
+
+    """
+    File checker for argparse action
+    """
 
     def __init__(self, *args, **kwargs):
         super(FileChecker, self).__init__(*args, **kwargs)
@@ -38,12 +51,16 @@ class FileChecker(argp.Action):
 
 class PymToolSettings(Settings):
 
+    """
+    Main settings class
+    """
     DESC = u"PyMol Toolbox"
-    COMMANDS = ("align", "visu", "aver", "cnstr")
+    COMMANDS = ("align", "visu", "aver", "cnstr", "multialign")
     COMMANDESCS = (u"Align 2 pdb structures",
                    u"Pymol visualisation",
                    u"Average 3d states of a pdb structure",
-                   u"Visualize constrains on a pdb structure")
+                   u"Visualize constrains on a pdb structure",
+                   u"Align multiple structures to one reference state")
     CONFPATH = "conf/pymtools.ini"
 
     def __init__(self):
@@ -51,7 +68,12 @@ class PymToolSettings(Settings):
         self.load_config(self.CONFPATH, pkg=True)
 
     def load_config(self, configpath, **kwargs):
-        logger.info("Loading default config file")
+        """
+        Load configuration file
+        :param configpath:
+        :param kwargs:
+        """
+        LOG.info("Loading default config file")
         super(PymToolSettings, self).load_config(configpath, **kwargs)
 
 
@@ -72,6 +94,9 @@ class Command(object):
 
     @property
     def settings(self):
+        """
+        settings
+        """
         raise NotImplementedError
 
     def _create_argparser(self):
@@ -106,21 +131,24 @@ class Command(object):
             if hasattr(self._args, "output"):
                 if not self._args.log:
                     # Don't generate log files
-                    logger.removeHandler("info_file_handler")
-                    logger.removeHandler("error_file_handler")
-                    logger.removeHandler("debug_file_handler")
+                    LOG.removeHandler("info_file_handler")
+                    LOG.removeHandler("error_file_handler")
+                    LOG.removeHandler("debug_file_handler")
                 log.set_outdir(self._args.output)
 
     def _update_settings(self):
         if self._args.conf_file:
-            logger.info("Updating settings with conf file")
+            LOG.info("Updating settings with conf file")
             self.settings.load_config(self._args.conf_file)
         # Update settings associated to command section
-        logger.info("Updating %s settings with args" % self.command)
+        LOG.info("Updating %s settings with args" % self.command)
         getattr(self.settings, self.command).args.update(self._args.__dict__)
 
     def run(self):
-        logger.info("Run %s command" % self.command)
+        """
+        run command
+        """
+        LOG.info("Run %s command" % self.command)
         getattr(self, self.command)(getattr(self.settings, self.command))
 
 
@@ -131,6 +159,10 @@ class PymToolCommand(Command):
 
     @property
     def settings(self):
+        """
+        settings
+        :return:
+        """
         if not self._settings:
             self._settings = PymToolSettings()
         return self._settings
@@ -151,6 +183,20 @@ class PymToolCommand(Command):
         group.add_argument("target", help="target structure file [.pdb]")
         group.add_argument("mob",
                            help="mobile structure file [.pdb]")
+        group.add_argument("--pretty", dest="pretty", action="store_true",
+                           default=False,
+                           help="Nice representation and colors")
+        return parser
+
+    @staticmethod
+    def _multialign_parser(desc=None):
+        parser = argp.ArgumentParser(description=desc,
+                                     add_help=False)
+        group = parser.add_argument_group('required arguments')
+        group.add_argument("target", help="target structure file [.pdb]")
+        group.add_argument("mob",
+                           help="Structure file(s) [.pdb]",
+                           nargs="+")
         group.add_argument("--pretty", dest="pretty", action="store_true",
                            default=False,
                            help="Nice representation and colors")
@@ -197,55 +243,94 @@ class PymToolCommand(Command):
         group.add_argument("pdb", action=FileChecker, help="PDB file")
         group.add_argument("-r", "--ref", action=FileChecker,
                            help="Reference pdb file")
+        group.add_argument("-g", "--group", dest="group", default=None,
+                           help="Name of the field if csv file given")
         group.add_argument("-w", "--writefiles", dest="writefiles",
                            action="store_true", default=False,
-                           help="Reference pdb file")
+                           help="Write output txt files")
         return parser
 
     @staticmethod
     def align(settings):
-        logger.info("Load %s target file", settings.args.get('target'))
+        """
+        align command
+        :param settings:
+        """
+        LOG.info("Load %s target file", settings.args.get('target'))
         try:
             cmd.load(settings.args.get('target'))
         except CmdException:
-            logger.error("Can't load %s", settings.args.get('target'))
+            LOG.error("Can't load %s", settings.args.get('target'))
 
-        logger.info("Load %s mobile file", settings.args.get('mob'))
+        LOG.info("Load %s mobile file", settings.args.get('mob'))
         try:
             cmd.load(settings.args.get('mob'))
         except CmdException:
-            logger.error("Can't load %s", settings.args.get('mob'))
+            LOG.error("Can't load %s", settings.args.get('mob'))
             raise
 
-        logger.info("Align and color by RMSD mobile against target structure "
-                    "with method %s" % settings.config.get('method'))
+        LOG.info("Align and color by RMSD mobile against target structure "
+                 "with method %s" % settings.config.get('method'))
         mob = os.path.basename(os.path.splitext(settings.args.get('mob'))[0])
         target = os.path.basename(os.path.splitext(
             settings.args.get('target'))[0])
-        logger.debug("mobile prefix: %s", mob)
-        logger.debug("target prefix: %s", target)
+        LOG.debug("mobile prefix: %s", mob)
+        LOG.debug("target prefix: %s", target)
         colorbyrmsd(mob, target, quiet=0,
                     guide=settings.config.get("guide"),
                     method=settings.config.get('method'))
 
     @staticmethod
+    def multialign(settings):
+        """
+        align command
+        :param settings:
+        """
+        LOG.info("Load %s target file", settings.args.get('target'))
+        try:
+            cmd.load(settings.args.get('target'))
+        except CmdException:
+            LOG.error("Can't load %s", settings.args.get('target'))
+
+        LOG.info("Load %s structure file(s)", settings.args.get('mob'))
+        for pdbfile in settings.args.get('mob'):
+            try:
+                cmd.load(pdbfile)
+            except CmdException:
+                LOG.error("Can't load %s", pdbfile)
+                raise
+
+        target = os.path.basename(os.path.splitext(
+            settings.args.get('target'))[0])
+        LOG.debug("target prefix: %s", target)
+        align_all(target, method=settings.config.get('method'))
+
+    @staticmethod
     def visu(settings):
-        logger.info("Load %s mobile file", settings.args.get('struct'))
+        """
+        visu command
+        :param settings:
+        """
+        LOG.info("Load %s mobile file", settings.args.get('struct'))
         try:
             cmd.load(settings.args.get('struct'))
         except CmdException:
-            logger.error("Can't load %s", settings.args.get('struct'))
+            LOG.error("Can't load %s", settings.args.get('struct'))
 
     @staticmethod
     def aver(settings):
-        cmd.set('orthoscopic', 1)
+        """
+        average pdb command
+        :param settings:
+        """
+        cmd.set('orthoscopic')
         if settings.config.get('all_states', 0):
-            cmd.set('all_states', 1)
-        logger.info("Load structure file %s" % settings.args.get('pdb'))
+            cmd.set('all_states')
+        LOG.info("Load structure file %s" % settings.args.get('pdb'))
         try:
             cmd.load(settings.args.get('pdb'))
         except CmdException:
-            logger.error("Can't load %s", settings.args.get('pdb'))
+            LOG.error("Can't load %s", settings.args.get('pdb'))
         mypdb = os.path.splitext(os.path.basename(settings.args.get('pdb')))[0]
         cmd.hide('everything', mypdb)
         cmd.show('ribbon', mypdb)
@@ -268,6 +353,10 @@ class PymToolCommand(Command):
 
     @staticmethod
     def cnstr(settings):
+        """
+        constraints visu command
+        :param settings:
+        """
         Cnstr(settings=settings).run()
 
     @staticmethod
@@ -291,9 +380,13 @@ class PymToolCommand(Command):
         # pymol.cmd.ray(800, 800)
 
     def save(self, settings):
-        logger.info("Saving pymol png and session")
+        """
+        Save pymol session
+        :param settings:
+        """
+        LOG.info("Saving pymol png and session")
         if settings.args.get('pretty'):
-            logger.info("Ray tracing pymol png")
+            LOG.info("Ray tracing pymol png")
             spec = True if self.command == "visu" else False
             self.pympretty(rainbow=spec)
         pymol.cmd.png("%s.png" % os.path.join(settings.args.get('output'),
@@ -303,10 +396,13 @@ class PymToolCommand(Command):
 
     def run(self):
         # Avoid GUI opening
+        """
+        Run & avoid GUI opening
+        """
         pymol.finish_launching()
         # call method relative to args.command
         super(PymToolCommand, self).run()
         # Save image and session
         self.save(getattr(self.settings, self.command))
-        logger.info("Closing pymol")
+        LOG.info("Closing pymol")
         pymol.cmd.quit()

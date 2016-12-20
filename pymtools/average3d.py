@@ -1,33 +1,33 @@
 # coding=utf-8
-from __future__ import print_function
-
 """
 AUTHOR:
     Cameron Mura <cmura@ucsd.edu>; 07/2005
 
 SYNOPSIS:
-    Python module "average3d.py" for averaging 3D coordinates of multiple 
-    states of a single PyMOL molecular object and storing residue-specific 
-    RMSDs for the bundle of structures in the b-factor field of the resulting 
-    averaged model. Could be used in conjuction with "putty"-style PyMOL 
-    cartoons to illustrate residue-specific RMSDs. 
+    Python module "average3d.py" for averaging 3D coordinates of multiple
+    states of a single PyMOL molecular object and storing residue-specific
+    RMSDs for the bundle of structures in the b-factor field of the resulting
+    averaged model. Could be used in conjuction with "putty"-style PyMOL
+    cartoons to illustrate residue-specific RMSDs.
 
 USAGE:
-    See this source file for now... in particular, any notes under individual 
+    See this source file for now... in particular, any notes under individual
     function definitions, such as 'avgStates()'.
 
 """
-#
-# Python module "average3d.py" for averaging 3D coordinates of multiple states 
-# of a single PyMOL molecular object and storing residue-specific RMSDs for the
-# bundle of structures in the b-factor field of the resulting averaged model.  
-# Could be used in conjuction with "putty"-style PyMOL cartoons to illustrate
-# residue-specific RMSDs. 
-#
+from __future__ import print_function
 
 from pymol import cmd
 from math import sqrt, pow
 from string import replace
+
+#
+# Python module "average3d.py" for averaging 3D coordinates of multiple states
+# of a single PyMOL molecular object and storing residue-specific RMSDs for the
+# bundle of structures in the b-factor field of the resulting averaged model.
+# Could be used in conjuction with "putty"-style PyMOL cartoons to illustrate
+# residue-specific RMSDs.
+#
 
 
 def avg_states(object='all', object_sel=None, first=1, last=0, newobj=None,
@@ -86,8 +86,7 @@ def avg_states(object='all', object_sel=None, first=1, last=0, newobj=None,
       "name CA" 
       or "name CA and resi 20-50" or whatever).
     """
-
-    global pair_file
+    pair_file = None
     object = str(object)
     object_sel = str(object_sel)
     first = int(first)
@@ -116,22 +115,23 @@ def avg_states(object='all', object_sel=None, first=1, last=0, newobj=None,
     else:
         # just do this instead of evaluating conditionals each time
         avg_file = open('/dev/null',
-                        'w')  
+                        'w')
         if pairs:
             pair_file = open('/dev/null',
                              'w')  # through the atom loops (below)...
 
-    obj_sel_string = (lambda o, s: (o and s and "%s and %s" % (o, s)) or
-                                   (o and not s and "%s and name CA" % o))(
+    obj_sel_string = (lambda o, sel: (o and sel and "%s and %s" % (o, sel)) or
+                                     (o and not sel and "%s and name CA" % o))(
         object, object_sel)
-    newobj_sel_string = (lambda o, s: (o and s and "%s and %s" % (o, s)) or
-                                      (o and not s and "%s and name CA" % o))(
+    newobj_sel_string = (lambda o, sel:
+                         (o and sel and "%s and %s" % (o, sel)) or
+                         (o and not sel and "%s and name CA" % o))(
         newobj, object_sel)
     print('%s' % ('-' * 80))
     print('Averaging %d states [%d, %d] of object "%s" (%d total states) '
           'to get new single-state object "%s"...' % (
-            num_states2avg, first, last, obj_sel_string, num_states_tot,
-            newobj))
+              num_states2avg, first, last, obj_sel_string, num_states_tot,
+              newobj))
     print('%s' % ('-' * 80))
 
     tmpobject = '%s_tmp4avg_%dto%d' % (object, first, last)
@@ -142,9 +142,9 @@ def avg_states(object='all', object_sel=None, first=1, last=0, newobj=None,
 
     if fitverdict != 'no':
         print("-> proceeding WITH FITTING to reference state...")
-        tmpobject_intrafit_rmsds = cmd.intra_fit(tmpobject, 1)
+        tmpobject_intrafit_rmsds = cmd.intra_fit(tmpobject)
         if verb:
-            print('   intrafit_rmsds = ',)
+            print('   intrafit_rmsds = ', )
             print(tmpobject_intrafit_rmsds)
     else:
         print("-> proceeding WITHOUT FITTING to reference state...")
@@ -152,19 +152,20 @@ def avg_states(object='all', object_sel=None, first=1, last=0, newobj=None,
     # create an atom index map between original (complete) object and subset
     #  to be averaged:
     atindex_map = [None]
-    for at in cmd.get_model(newobj_sel_string, 1).atom:
+    for at in cmd.get_model(newobj_sel_string).atom:
         atindex_map.append(at.index)
     if verb:
-        print("-> atom index_map = ",)
+        print("-> atom index_map = ", )
         print(atindex_map)
 
-    newobj_chempy = cmd.get_model(tmpobject, 1)
+    newobj_chempy = cmd.get_model(tmpobject)
     for at in newobj_chempy.atom:
         this_at_idx = at.index
         sum_x = sum_y = sum_z = 0.0
-        avg_x = avg_y = avg_z = 0.0
+        # avg_x = avg_y = avg_z = 0.0
         state_coords = []
-        rmsd_sum = rmsd = 0.0
+        # rmsd_sum = rmsd = 0.0
+        rmsd_sum = 0.0
         for s in range(1, num_states2avg + 1):
             this_x = cmd.get_model(tmpobject, s).atom[this_at_idx - 1].coord[0]
             this_y = cmd.get_model(tmpobject, s).atom[this_at_idx - 1].coord[1]
@@ -191,7 +192,7 @@ def avg_states(object='all', object_sel=None, first=1, last=0, newobj=None,
             rmsd_sum += pow(calcDist(somept, [avg_x, avg_y, avg_z]), 2.0)
         rmsd = sqrt(rmsd_sum / num_states2avg)
         # DEBUG:
-        # DEBUG print('newobj = %s / id = %d / b = %0.3f'
+        # DEBUG print('newobj = %sel / id = %d / b = %0.3f'
         # %(newobj,atindex_map[this_at_idx],rmsd)
         cmd.alter('{0:s} and id {1:d}'.format(newobj, atindex_map[this_at_idx]),
                   'b=%0.3f' % rmsd)
@@ -246,10 +247,16 @@ def avg_states(object='all', object_sel=None, first=1, last=0, newobj=None,
 
 
 def calcDist(vec1, vec2):
-    sum = 0.0
+    """
+
+    :param vec1:
+    :param vec2:
+    :return:
+    """
+    mysum = 0.0
     for (coor1, coor2) in zip(vec1, vec2):
-        sum += pow((coor1 - coor2), 2.0)
-    return sqrt(sum)
+        mysum += pow((coor1 - coor2), 2.0)
+    return sqrt(mysum)
 
 
 # make it directly callable in PyMOL:

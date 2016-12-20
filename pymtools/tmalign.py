@@ -1,3 +1,4 @@
+# coding=utf-8
 """
 (c) 2011-2012 Thomas Holder, MPI for Developmental Biology
 """
@@ -50,6 +51,10 @@ cealign tmalign}
     mobile_obj = cmd.get_object_list('first (' + mobile + ')')[0]
 
     def myalign(alimethod):
+        """
+
+        :param alimethod:
+        """
         newmobile = cmd.get_unused_name(mobile_obj + '_' + alimethod)
         cmd.create(newmobile, mobile_obj)
         start = time.time()
@@ -194,8 +199,7 @@ tmscore, mmalign
                 ' '.join(idx for (idx, m) in zip(mobile_idx, alignment[1]) if
                          m in ':.'),
                 ' '.join(idx for (idx, m) in zip(target_idx, alignment[1]) if
-                         m in ':.'),
-                cycles=0, matchmaker=4, object=object)
+                         m in ':.'), matchmaker=4, object=object)
         else:
             print('Could not load alignment object')
 

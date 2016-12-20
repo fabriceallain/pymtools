@@ -1,3 +1,4 @@
+# coding=utf-8
 """
                             Pymol module reading NMR restraints
 """
@@ -11,7 +12,7 @@ from pymol import cmd, CmdException
 from .reader import CnstrFile
 
 
-logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 class Cnstr(object):
@@ -27,10 +28,14 @@ class Cnstr(object):
         self._refname = None
 
     def load_cnstr(self):
+        """
+        Load constraint file
+        """
         self._cnstrfile.load()
         names = []
         eval_method = self.settings.config.get('eval_method', 'contact')
         contact_type = self.settings.config.get('contact_type')
+        groupname = self.settings.args.get('group')
 
         if self.settings.args.get('writefiles', False):
             outfile = open("%s.out" % os.path.join(
@@ -45,33 +50,43 @@ class Cnstr(object):
         else:
             outfile = None
 
+        target, upper, lower, spec = None, None, None, None
         for idline in self._cnstrfile.lines:
             # For each restraint
             line = self._cnstrfile.lines[idline]
-            spec = line.get('spec', 'noname')
             resids = (line.get('resid1', ''), line.get('resid2', ''))
             atms = (line.get('atm1', ''), line.get('atm2', ''))
-            target = line.get('target', None)
-            upper = line.get('upper', None)
-            lower = line.get('lower', None)
-            group = line.get('group', None)
+            ambiflag = line.get('ambiflag', False)
+            if not ambiflag:
+                spec = line.get('spec', 'noname')
+                target = line.get('target', None)
+                upper = line.get('upper', None)
+                lower = line.get('lower', None)
+                if target:
+                    upper = float(target) + float(upper) if upper else None
+                    lower = float(target) - float(lower) if lower else None
 
-            if target:
-                upper = float(target) + float(upper) if upper else None
-                lower = float(target) - float(lower) if lower else None
+            if groupname and line.get(groupname) in ("False", "True"):
+                group = groupname if line.get(groupname) == "True" \
+                    else "un" + groupname
+            else:
+                group = line.get('group', None)
+
 
             extra = "\t".join((str(lower), str(target), str(upper))) if \
                 eval_method == "bound" else ""
             # TODO: add a violation tolerance ?
 
             if '' in atms:
-                logger.warning('No atms related to cnsrt no %d' % idline)
+                LOG.warning('No atms related to cnsrt at line %s' %
+                            (idline + 1))
             if '' in resids:
-                logger.error('No cnstr at line %d' % idline)
+                LOG.error('No cnstr at line %s' % (idline + 1))
                 continue
 
             # TODO: condition below can be simplified ...
-            if contact_type == "all":
+            if (contact_type == "all") or \
+                    (contact_type == "min" and atms == ("CA", "CA")):
                 sel1 = '%s and resi %s and name %s' % (
                     self._pdbname, resids[0], atms[0]) if atms[0] \
                     else '%s and resi %d' % (self._pdbname, resids[0])
@@ -82,15 +97,11 @@ class Cnstr(object):
                     resid1=resids[0], atm1=atms[0], ref=self._refname)
                 sel4 = '{ref} and resi {resid2} and name {atm2}'.format(
                     resid2=resids[1], atm2=atms[1], ref=self._refname)
+                LOG.info("Selecting restraint at line %s" % (idline + 1))
             else:
-                sel1 = '{pdb} and resi {resid} and name CA'.format(
-                    pdb=self._pdbname, resid=resids[0])
-                sel2 = '{pdb} and resi {resid} and name CA'.format(
-                    pdb=self._pdbname, resid=resids[1])
-                sel3 = '{ref} and resi {resid1} and name CA'.format(
-                    resid1=resids[0], ref=self._refname)
-                sel4 = '{ref} and resi {resid2} and name CA'.format(
-                    resid2=resids[1], ref=self._refname)
+                LOG.debug("Ignoring line %s", idline + 1)
+                LOG.debug("%s", line)
+                continue
 
             if self._reflag:
                 # If structure given, we look at reference distance
@@ -99,7 +110,7 @@ class Cnstr(object):
                 dist = cmd.get_distance(sel1, sel2)
 
             # TODO: condition below can be simplified
-            # Group ca be decided by a contact treshold in the structure or in
+            # Group can be decided by a contact treshold in the structure or in
             # the reference (if given). It can also be if distances in the
             # structure (or ref if given) lie inside bounds defined in the
             # cnstr file
@@ -114,18 +125,18 @@ class Cnstr(object):
                     if lower and upper:
                         group = "TP" if lower <= dist <= upper else "FP"
                     else:
-                        logger.error("No bound available for restraint no %d" %
-                                     idline)
+                        LOG.error("No bound available for restraint no %d" %
+                                  (idline + 1))
                         continue
                 elif eval_method == "bound" and not self._reflag:
                     if lower and upper:
                         group = "unviol" if lower <= dist <= upper else "viol"
                     else:
-                        logger.error("No bound available for restraint no %d" %
-                                     idline)
+                        LOG.error("No bound available for restraint no %d" %
+                                  (idline + 1))
                         continue
                 else:
-                    logger.critical(
+                    LOG.critical(
                         "Evaluation method given is not supported (%s)"
                         % eval_method)
                     sys.exit(1)
@@ -138,19 +149,22 @@ class Cnstr(object):
                 if self._reflag:
                     names.append(nameref)
             try:
+                LOG.debug("Distance cmd on %s and %s with groupname %s", sel1,
+                          sel2, name)
                 cmd.distance(name, sel1, sel2)
                 if self._reflag:
+                    LOG.debug("Distance cmd on %s and %s with groupname %s",
+                              sel3,
+                              sel4, nameref)
                     cmd.distance(nameref, sel3, sel4)
             except CmdException:
-                logger.error("Wrong selection")
+                LOG.error("Wrong selection")
 
             if outfile:
-                if contact_type == "all" or (
-                                contact_type == "min" and atms == ("CA", "CA")):
-                    outfile.write("\n%s" % "\t".join((resids[0], resids[1],
-                                                      atms[0], atms[1],
-                                                      str(dist), group, extra,
-                                                      spec)))
+                outfile.write("\n%s" % "\t".join((resids[0], resids[1],
+                                                  atms[0], atms[1],
+                                                  str(dist), group, extra,
+                                                  spec)))
 
         for name in names:
             if name.endswith("_FP") or name.endswith("_viol"):
@@ -175,8 +189,8 @@ class Cnstr(object):
                                                              0.05))
             cmd.set('dash_width', self.settings.config.get('dash_width', 0.5))
             cmd.set('dash_gap', self.settings.config.get('dash_gap', 0.5))
-            cmd.set('stick_transparency', self.settings.config.get('stick_alpha',
-                                                                   0.8))
+            cmd.set('stick_transparency', self.settings.config.get(
+                'stick_alpha', 0.8))
             # cmd.hide('labels')
         cmd.color(self.settings.config.get('color', 'gray'), self._pdbname)
         if self._reflag:
@@ -186,32 +200,35 @@ class Cnstr(object):
             outfile.close()
 
     def run(self):
-        logger.info("Load structure file %s" % self.settings.args.get('pdb'))
+        """
+        Main method
+        """
+        LOG.info("Load structure file %s" % self.settings.args.get('pdb'))
         try:
             cmd.load(self.settings.args.get('pdb'), object=self._pdbname)
         except CmdException:
-            logger.error("Can't load %s", self.settings.args.get('pdb'))
+            LOG.error("Can't load %s", self.settings.args.get('pdb'))
         if self.settings.args.get('ref'):
             self._refname = os.path.basename(os.path.splitext(
                 self.settings.args.get('ref'))[0])
-            logger.info("Load reference structure file")
+            LOG.info("Load reference structure file")
             try:
                 cmd.load(self.settings.args.get('ref'), object=self._refname)
                 self._reflag = True
             except CmdException:
-                logger.error("Can't load %s", self._refname)
+                LOG.error("Can't load %s", self._refname)
             method = self.settings.config.get('ali_method', 'align')
             mobile = self._pdbname
             target = self._refname
             try:
                 align = cmd.keyword[method][0]
-                logger.info("Align %s on %s" % (mobile, target))
+                LOG.info("Align %s on %s" % (mobile, target))
                 align(mobile, target, object="_aln")
                 cmd.delete("_aln")
             except Exception as msg:
-                logger.error('Wrong alignment method (%s)' % method)
+                LOG.error('Wrong alignment method (%s)' % method)
                 raise CmdException(msg)
-        logger.info("Load constrains file %s" %
-                    self.settings.args.get('constrains'))
+        LOG.info("Load constrains file %s" %
+                 self.settings.args.get('constrains'))
         # read cnstr file
         self.load_cnstr()

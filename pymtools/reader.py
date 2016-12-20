@@ -1,3 +1,7 @@
+# coding=utf-8
+"""
+                                Reader module
+"""
 import os
 import re
 import sys
@@ -5,10 +9,13 @@ import csv
 import logging
 
 
-logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 class ReadableFile(object):
+    """
+    Readable file argparse action
+    """
 
     def __init__(self, filepath, patterns=None):
         """
@@ -29,7 +36,7 @@ class ReadableFile(object):
         """
         lines_dict = {}
         if not self.patterns and self.filetype == "csv":
-            logger.info("Reading with csv parser")
+            LOG.info("Reading with csv parser")
             with open(self.filepath) as csvfile:
                 reader = csv.DictReader(
                     csvfile,
@@ -46,9 +53,9 @@ class ReadableFile(object):
                     lines_dict[index] = line
             self.lines = lines_dict
         elif self.patterns:
-            logger.info("Reading %s with %s parser" % (self.filepath,
-                                                       self.filetype))
-            logger.debug("Patterns: %s" % self.patterns)
+            LOG.info("Reading %s with %s parser" % (self.filepath,
+                                                    self.filetype))
+            LOG.debug("Patterns: %s" % self.patterns)
             with open(self.filepath) as f:
                 for index, line in enumerate(f):
                     for pattern in self.patterns:
@@ -57,14 +64,17 @@ class ReadableFile(object):
                             lines_dict[index] = match.groupdict()
                             break
             self.lines = lines_dict
-            logger.debug("Read %d lines" % len(self.lines))
+            LOG.debug("Read %d lines" % len(self.lines))
         else:
-            logger.error("Can't read input file %s. Check if given format is "
-                         "supported [%s]" % (self.filepath, self.filetype))
+            LOG.error("Can't read input file %s. Check if given format is "
+                      "supported [%s]" % (self.filepath, self.filetype))
             sys.exit(1)
 
 
 class CnstrFile(ReadableFile):
+    """
+    Constraint file class
+    """
     TBLFORMAT = [
         re.compile(
             r"^assign\s+\(segid\s+\"\s*(?P<segid1>\w*)\s*\"\s+and\s+resid\s+"
@@ -80,6 +90,17 @@ class CnstrFile(ReadableFile):
             r"\)\s+\(resid\s+(?P<resid2>\d+)\s+and\s+name"
             r"\s+(?P<atm2>\w+)\)\s+(?P<target>\d+\.?\d*)\s+(?P<lower>\d+\.?\d*)"
             r"\s+(?P<upper>\d+\.?\d*)\s+weight\s+(?P<weight>\d+\.?\d*)\s*$"
+        ),
+        re.compile(
+            r"^\s*(?P<ambiflag>or)\s+\(segid\s+\"\s*(?P<segid1>\w*)\s*\"\s+and"
+            r"\s+resid\s+(?P<resid1>\d+)\s+and\s+name\s+(?P<atm1>\w+)\)\s+\(seg"
+            r"id\s+\"\s*(?P<segid2>\w*)\s*\"\s+and\s+resid\s+(?P<resid2>\d+)\s+"
+            r"and\s+name\s+(?P<atm2>\w+)\)\s*$"
+        ),
+        re.compile(
+            r"^\s*(?P<ambigflag>or)\s+\(resid\s+(?P<resid1>\d+)\s+and\s+name"
+            r"\s+(?P<atm1>\w+)\)\s+\(resid\s+(?P<resid2>\d+)\s+and\s+name"
+            r"\s+(?P<atm2>\w+)\)\s*$"
         )
     ]
     TXTFORMAT = [

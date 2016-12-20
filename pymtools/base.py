@@ -14,11 +14,13 @@ import pkg_resources as pkgr
 from configparser import SafeConfigParser
 
 
-logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
-class Setting:
-
+class Setting(object):
+    """
+    Setting class
+    """
     def __init__(self):
         self.config = collections.defaultdict()
         self.args = collections.defaultdict()
@@ -29,6 +31,9 @@ class Setting:
 
 
 class Settings(object):
+    """
+    Group setting objects
+    """
 
     def __init__(self, sections):
         self._sections = set(sections)
@@ -44,7 +49,7 @@ class Settings(object):
         :return:
         """
         if not pkg and not os.path.exists(configpath):
-            logger.error("Configuration file not found (%s)" % configpath)
+            LOG.error("Configuration file not found (%s)" % configpath)
             from errno import ENOENT
             raise OSError(ENOENT)
         config = SafeConfigParser(allow_no_value=True)
@@ -53,20 +58,24 @@ class Settings(object):
                 config.readfp(conf)
         else:
             config.read(configpath)
-        logger.debug(config)
+        LOG.debug(config)
         for section in config.sections():
             if hasattr(self, section):
                 tmp = format_dict(dict(config.items(section)))
                 getattr(self, section).config.update(tmp)
-                logger.debug("%s config updated" % section)
-                logger.debug("%s.%s : %s" % (self.__class__.__name__, section,
-                                             getattr(self, section)))
+                LOG.debug("%s config updated" % section)
+                LOG.debug("%s.%s : %s" % (self.__class__.__name__, section,
+                                          getattr(self, section)))
             else:
-                logger.warning("Unknow config section %s" % section)
+                LOG.warning("Unknow config section %s" % section)
 
     def write_config(self, filename):
         # Ecrit les config de toutes les sections dans un autre fichier
-        logger.info("Writing .ini file (%s)" % filename)
+        """
+
+        :param filename:
+        """
+        LOG.info("Writing .ini file (%s)" % filename)
         config = SafeConfigParser(allow_no_value=True)
         iniout = open(filename, mode="w")
         for section in self._sections:
@@ -193,11 +202,11 @@ def format_str(string):
             try:
                 ev_str = ast.literal_eval(string)
             except ValueError:
-                logger.error("Don't understand given string %s. Please check "
-                             "format." % string)
+                LOG.error("Don't understand given string %s. Please check "
+                          "format." % string)
                 return None
             except SyntaxError:
-                logger.error("Given string %s is not a valid expression" % string)
+                LOG.error("Given string %s is not a valid expression" % string)
                 return None
             return ev_str
         else:
