@@ -73,7 +73,7 @@ class PymToolSettings(Settings):
         :param configpath:
         :param kwargs:
         """
-        LOG.info("Loading default config file")
+        LOG.debug("Loading default config file")
         super(PymToolSettings, self).load_config(configpath, **kwargs)
 
 
@@ -83,11 +83,11 @@ class Command(object):
     """
 
     def __init__(self, log=None):
-        if log and hasattr(log, 'welcome'):
-            log.welcome()
         self._settings = None
         parser = self._create_argparser()
         self._args = parser.parse_args()
+        if log and hasattr(log, 'welcome'):
+            log.welcome()
         self.command = self._args.command
         self._update_logger(log)
         self._update_settings()

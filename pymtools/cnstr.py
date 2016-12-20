@@ -27,11 +27,38 @@ class Cnstr(object):
         self._reflag = False
         self._refname = None
 
+    def _contact_label(self, eval_method, dist, lower, upper, idline):
+        if eval_method == 'contact' and self._reflag:
+            return "TP" if dist < float(self.settings.config.get(
+                'contact', 5.0)) else "FP"
+        elif eval_method == 'contact' and not self._reflag:
+            return "unviol" if dist < float(self.settings.config.get(
+                'contact', 5.0)) else "viol"
+        elif eval_method == "bound" and self._reflag:
+            if lower and upper:
+                return "TP" if lower <= dist <= upper else "FP"
+            else:
+                LOG.error("No bound available for restraint no %d" %
+                          (idline + 1))
+        elif eval_method == "bound" and not self._reflag:
+            if lower and upper:
+                return "unviol" if lower <= dist <= upper else "viol"
+            else:
+                LOG.error("No bound available for restraint no %d" %
+                          (idline + 1))
+                return
+        else:
+            LOG.critical(
+                "Evaluation method given is not supported (%s)"
+                % eval_method)
+            sys.exit(1)
+
     def load_cnstr(self):
         """
         Load constraint file
         """
         self._cnstrfile.load()
+
         names = []
         eval_method = self.settings.config.get('eval_method', 'contact')
         contact_type = self.settings.config.get('contact_type')
@@ -72,7 +99,6 @@ class Cnstr(object):
             else:
                 group = line.get('group', None)
 
-
             extra = "\t".join((str(lower), str(target), str(upper))) if \
                 eval_method == "bound" else ""
             # TODO: add a violation tolerance ?
@@ -85,6 +111,7 @@ class Cnstr(object):
                 continue
 
             # TODO: condition below can be simplified ...
+            # Setting pymol selections
             if (contact_type == "all") or \
                     (contact_type == "min" and atms == ("CA", "CA")):
                 sel1 = '%s and resi %s and name %s' % (
@@ -107,6 +134,7 @@ class Cnstr(object):
                 # If structure given, we look at reference distance
                 dist = cmd.get_distance(sel3, sel4)
             else:
+                #
                 dist = cmd.get_distance(sel1, sel2)
 
             # TODO: condition below can be simplified
@@ -115,32 +143,10 @@ class Cnstr(object):
             # structure (or ref if given) lie inside bounds defined in the
             # cnstr file
             if not group:
-                if eval_method == 'contact' and self._reflag:
-                    group = "TP" if dist < float(self.settings.config.get(
-                        'contact', 5.0)) else "FP"
-                elif eval_method == 'contact' and not self._reflag:
-                    group = "unviol" if dist < float(self.settings.config.get(
-                        'contact', 5.0)) else "viol"
-                elif eval_method == "bound" and self._reflag:
-                    if lower and upper:
-                        group = "TP" if lower <= dist <= upper else "FP"
-                    else:
-                        LOG.error("No bound available for restraint no %d" %
-                                  (idline + 1))
-                        continue
-                elif eval_method == "bound" and not self._reflag:
-                    if lower and upper:
-                        group = "unviol" if lower <= dist <= upper else "viol"
-                    else:
-                        LOG.error("No bound available for restraint no %d" %
-                                  (idline + 1))
-                        continue
-                else:
-                    LOG.critical(
-                        "Evaluation method given is not supported (%s)"
-                        % eval_method)
-                    sys.exit(1)
+                group = self._contact_label(eval_method, dist, lower, upper,
+                                            idline)
 
+            # PYMOL cmd.distance calls
             name = "_".join(('mobile', spec, group))
             nameref = "_".join(('ref', spec, group)) if self._reflag \
                 else None
@@ -160,6 +166,7 @@ class Cnstr(object):
             except CmdException:
                 LOG.error("Wrong selection")
 
+            # OUTPUT line
             if outfile:
                 outfile.write("\n%s" % "\t".join((resids[0], resids[1],
                                                   atms[0], atms[1],
@@ -201,17 +208,19 @@ class Cnstr(object):
 
     def run(self):
         """
-        Main method
+        Load structure and restraint files and save pymol session with projected
+        restraints.
         """
         LOG.info("Load structure file %s" % self.settings.args.get('pdb'))
         try:
             cmd.load(self.settings.args.get('pdb'), object=self._pdbname)
         except CmdException:
             LOG.error("Can't load %s", self.settings.args.get('pdb'))
+
         if self.settings.args.get('ref'):
+            LOG.info("Load reference structure file")
             self._refname = os.path.basename(os.path.splitext(
                 self.settings.args.get('ref'))[0])
-            LOG.info("Load reference structure file")
             try:
                 cmd.load(self.settings.args.get('ref'), object=self._refname)
                 self._reflag = True
