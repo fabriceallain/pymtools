@@ -78,13 +78,22 @@ class Cnstr(object):
             outfile = None
 
         target, upper, lower, spec = None, None, None, None
+        dist = []
         for idline in self._cnstrfile.lines:
             # For each restraint
+            # print(idline + 1 == len(self._cnstrfile.lines))
+            # If outfile and assignflag OR last line, save oldresults
             line = self._cnstrfile.lines[idline]
+
+            # If assignflag, initialize all cnstr vars
+            # Else if ambiflag, add vars to cnstr
+            # Else return error
             resids = (line.get('resid1', ''), line.get('resid2', ''))
             atms = (line.get('atm1', ''), line.get('atm2', ''))
             ambiflag = line.get('ambiflag', False)
-            if not ambiflag:
+            assignflag = line.get('assignflag', False)
+            if assignflag:
+                dist = []
                 spec = line.get('spec', 'noname')
                 target = line.get('target', None)
                 upper = line.get('upper', None)
@@ -129,12 +138,12 @@ class Cnstr(object):
                 LOG.debug("Ignoring line %s", idline + 1)
                 LOG.debug("%s", line)
                 continue
-
+            # If ambig flag, append new dist to dist list
+            # Otherwise initialize dist list with new dist
             if self._reflag:
                 # If structure given, we look at reference distance
                 dist = cmd.get_distance(sel3, sel4)
             else:
-                #
                 dist = cmd.get_distance(sel1, sel2)
 
             # TODO: condition below can be simplified

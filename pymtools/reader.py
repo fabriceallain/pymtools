@@ -77,16 +77,17 @@ class CnstrFile(ReadableFile):
     """
     TBLFORMAT = [
         re.compile(
-            r"^assign\s+\(segid\s+\"\s*(?P<segid1>\w*)\s*\"\s+and\s+resid\s+"
-            r"(?P<resid1>\d+)\s+and\s+name\s+(?P<atm1>\w+)\)\s+\(segid\s+\"\s*"
-            r"(?P<segid2>\w*)\s*\"\s+and\s+resid\s+(?P<resid2>\d+)\s+and\s+name"
-            r"\s+(?P<atm2>\w+)\)\s+(?P<target>\d+\.?\d*)\s+(?P<lower>\d+\.?\d*)"
-            r"\s+(?P<upper>\d+\.?\d*)\s+weight\s+(?P<weight>\d+\.?\d*)\s+!\s+"
-            r"spec=(?P<spec>\w+),\s+no=(?P<no>\d+),\s+id=(?P<id>\d+),\s+"
-            r"vol=(?P<vol>\d+\.?\d*e?-?\d*)\s*$"
+            r"^(?P<assignflag>assign)\s+\(segid\s+\"\s*(?P<segid1>\w*)\s*\"\s+"
+            r"and\s+resid\s+(?P<resid1>\d+)\s+and\s+name\s+(?P<atm1>\w+)\)\s+"
+            r"\(segid\s+\"\s*(?P<segid2>\w*)\s*\"\s+and\s+resid\s+(?P<resid2>"
+            r"\d+)\s+and\s+name\s+(?P<atm2>\w+)\)\s+(?P<target>\d+\.?\d*)\s+"
+            r"(?P<lower>\d+\.?\d*)\s+(?P<upper>\d+\.?\d*)\s+weight\s+(?P<weight"
+            r">\d+\.?\d*)\s+!\s+spec=(?P<spec>\w+),\s+no=(?P<no>\d+),\s+id=(?P<"
+            r"id>\d+),\s+vol=(?P<vol>\d+\.?\d*e?-?\d*)\s*$"
         ),
         re.compile(
-            r"^assign\s+\(resid\s+(?P<resid1>\d+)\s+and\s+name\s+(?P<atm1>\w+)"
+            r"^(?P<assignflag>assign)\s+\(resid\s+(?P<resid1>\d+)\s+and\s+name"
+            r"\s+(?P<atm1>\w+)"
             r"\)\s+\(resid\s+(?P<resid2>\d+)\s+and\s+name"
             r"\s+(?P<atm2>\w+)\)\s+(?P<target>\d+\.?\d*)\s+(?P<lower>\d+\.?\d*)"
             r"\s+(?P<upper>\d+\.?\d*)\s+weight\s+(?P<weight>\d+\.?\d*)\s*$"
